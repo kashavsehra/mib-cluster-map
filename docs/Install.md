@@ -170,10 +170,14 @@ The cluster only shows the head unit's map window at that window's own size:
 800×480 on the Golf, 1010×376 on some SEAT and Skoda clusters. A window of
 another size arrives as coloured stripes. The installer reads the size from
 the display manager (`dmdt gd`, window 33) and opens the player's window at
-it. Android Auto's cluster video is always 800×480, so where the window has
-another shape the phone is asked to leave margins (0×182 for 1010×376) and
-the player scales the rest to fill the window. CarPlay is asked for the
-window's size. If the size cannot be read, the card's `GAL_PLAYER_WINDOW`
+it. Android Auto normally uses 800×480, so where the window has another shape
+the phone is asked to leave margins (0×182 for 1010×376) and the player
+scales the rest to fill the window. Optional 720p and 1080p test modes ask
+for a larger frame and margins that leave the cockpit window's pixels; the
+player crops those margins and displays them 1:1 when the dimensions match.
+The modes are not car-tested here and require that the head unit offers the
+requested resolution in its primary video configuration. CarPlay is asked
+for the window's size. If the size cannot be read, the card's `GAL_PLAYER_WINDOW`
 is used when set (for example `GAL_PLAYER_WINDOW=1010x376`), then the size
 the player found on this cockpit at an earlier start, otherwise the
 usual size for the make (1010×376 on SEAT and Skoda, 800×480 on VW and
@@ -215,6 +219,8 @@ it must start at the beginning of the line, with no `#` in front.
 | `GAL_SECONDARY_UI_THEME` | 0 (follows the headlights) | you want the cluster map always dark (2) or always light (1). Waze stays dark whatever is set. 1 or 2 costs two bytes of the insets message, so fewer insets can go above 127 |
 | `CLUSTERMAP_KEEP_SETTINGS` | unset (keep) | you want a clean install. Each install remembers the lines you changed in `gal_dualscreen.conf` and puts them back at the next install wherever the new card still has the shipped default; a line changed on the new card wins, and `update_result.txt` lists what was kept. When you install the same release again, a setting you have edited on the card since the last install is used as the card has it, so a line you switch off stays off. `0` installs only the card's settings: use it once if a setting from an older release keeps coming back. Settings from v1.1.0 and betas before v1.1.1-beta19 are not carried over. The uninstall forgets them |
 | `CLUSTERMAP_FULL_FRAME` | 0 | the map looks soft on a wide window (SEAT, Skoda, Audi). 1 has the phone draw on the whole 800×480 frame with wide pixels instead of leaving margins: more detail, same layout. Also a green-menu switch ("Sharper map"), so it can be tried in the car. From AMDFX60's fork, car-tested on his Skoda Superb (#56) |
+| `CLUSTERMAP_720P` | 0 | test a 1280×720 Android Auto frame, with margins leaving the cockpit window's own pixels (for example 1010×376). Switchable from the green menu. Not car-tested here; requires the primary sink to advertise 720p |
+| `CLUSTERMAP_1080P` | 0 | test a 1920×1080 frame, with margins leaving the cockpit window's own pixels (for example 1440×455). Switchable from the green menu. Not car-tested here; requires the primary sink to advertise 1080p. Mutually exclusive with `CLUSTERMAP_720P`; either high-resolution mode takes precedence over `CLUSTERMAP_FULL_FRAME` |
 | `GAL_PLAYER_PRIORITY` | unset | the cluster map stutters when the unit is busy. 12 raises the player a little above the default 10; it never lowers it. Not car-tested |
 | `GAL_DUALSCREEN_AAP_MINOR` | 5 | the Android Auto version the unit claims (1.x). The map shows at 2 to 7. At 6 or higher Google Maps sends newer navigation messages this unit cannot read; the hook translates them into the old ones (`GAL_DUALSCREEN_NAV_TRANSLATE`, on), so the arrows jar should keep its turn pictograms. Not yet car-tested above 5 (#4) |
 | `GAL_PLAYER_WINDOW` | unset | the installer says the cluster map window was not listed and guessed wrong. It assumes `1010x376` on SEAT and Skoda and `800x480` on VW, but some VW cockpits are `1010x376` (#52) |
@@ -235,7 +241,7 @@ it must start at the beginning of the line, with no `#` in front.
 | `CLUSTERMAP_CARPLAY_WHEEL_ZOOM` | auto | Audi A6/A7 C7.5 (`K3663`) only: the steering-wheel roller zooms the CarPlay map on the cockpit (auto). `reverse` if it zooms the wrong way round, `0` to leave the roller to the car's map. Added only on the exact interface build it was made for; see docs/CarPlay.md |
 | `CLUSTERMAP_CARPLAY_WHEEL_ZOOM_ID` | `82137` | Chinese A6/A7 C7.5 (`K1006_2`) only: the roller's id. Change it only if `/tmp/clustermap-wheelzoom.log` shows the roller with another id |
 | `CLUSTERMAP_CARPLAY_HIDE_NAV` | 0 | CarPlay: the cockpit leaves the map when the iPhone starts a route and returns when it ends (US `P3662`, #10). 1 stops the car being told the iPhone is navigating. Not car-tested. |
-| `GAL_PLAYER_DECODER` | sw | `sw` is the tested software decoder. `hw` uses the unit's own video decoder and frees most of a processor core. If it will not open, the player uses software; if it fails while decoding, it stays off until the next reboot. **Not yet car-tested** |
+| `GAL_PLAYER_DECODER` | sw | `sw` is the tested software decoder. `hw` uses the unit's own video decoder and frees most of a processor core; it crops the selected Android Auto frame to the window. If it will not open, the player uses software; if it fails while decoding, it stays off until the next reboot. **Not yet car-tested** |
 | `GAL_PLAYER_NVSS_OUTPUT` | 1 | the cluster stays black with `hw`: try 0 (uncomment the line first) |
 | `GAL_DUALSCREEN_DEBUG`, `GAL_FIX_STREAM_TIMING`, `GAL_PLAYER_STATS`, `GAL_HOOK_LOG_MAX_MB` | 0, 0, 0, 1 | full trace for a bug report: 0, 1, 1, 10, then install over SSH with `enable_hook.sh --debug` |
 

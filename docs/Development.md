@@ -25,7 +25,10 @@ phone ──USB──► gal (stock Android Auto program)
    recognise, it does nothing.
 2. **The player** (`player/opengl_gpu.cc`) decodes the video, either with the
    unit's NvSS hardware decoder (`libnvss_video.so`, the one `gal` uses for
-   the centre screen) or FFmpeg in software drawn with `glDrawTextureNV`. At
+   the centre screen) or FFmpeg in software drawn with `glDrawTextureNV`.
+   Standard 800×480 streams are fitted as before; optional 1280×720 and
+   1920×1080 test modes crop configured margins to the cockpit window, using
+   nearest luma sampling when the visible pixels match the window 1:1. At
    the first keyframe it switches the cluster to its window
    (`dmdt dc 70 3`, `dmdt sc 4 70`); at the end it gives the stock map back
    (`dmdt dc 70 33`).

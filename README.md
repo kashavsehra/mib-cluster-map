@@ -92,6 +92,12 @@ something hides behind the dials.
 Starting points from other owners are in the
 [Install guide](docs/Install.md#settings-owners-have-settled-on).
 
+Optional `CLUSTERMAP_720P=1` and `CLUSTERMAP_1080P=1` settings test higher
+resolution streams, cropped to the cockpit window (including 1440×455 for
+1080p). They are off by default, require the head unit to advertise that
+resolution, and are not yet car-tested in this project. The green menu has
+separate 720p and 1080p test switches.
+
 The update writes what it did to `ClusterMap/update_result.txt` on the card.
 It also adds a **ClusterMap** screen to the green engineering menu (hold MENU >
 `Testmode` > `Green Developer Menu`) for status, logs, uninstall and the

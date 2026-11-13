@@ -44,15 +44,12 @@
  * so a perfectly decoded stream would land on a displayable nothing is
  * showing.
  *
- * Margins (GAL_SECONDARY_MARGINS, default 0x0) tell the phone how much of
- * the coded 800x480 frame the head unit will crop, so it draws only in the
- * rest. Where the cluster map window is 800x480 (the Golf) none are needed.
- * Where it has another shape (1010x376 on some SEAT and Skoda clusters) the
- * installer sets margins that leave a band of that shape, and the player
- * crops them off and scales the band to fill the window. UI placement
- * inside the band is controlled separately through UiConfig
- * field 2/contentInsets. A nonzero GAL_CROP_TOP or GAL_CROP_BOTTOM instead
- * sends the phone the full frame and lets the player crop and stretch it.
+ * Margins (GAL_SECONDARY_MARGINS) tell the phone how much of the coded frame
+ * the head unit will crop. On an 800x480 frame they leave a band that the
+ * player scales to the cluster window; optional 720p and 1080p modes leave
+ * the cockpit window's own pixels visible. UI placement is controlled
+ * separately through UiConfig field 2/contentInsets. GAL_CROP_TOP and
+ * GAL_CROP_BOTTOM apply only to the 800x480 frame.
  *
  * The compiled fallback is dpi 140 and viewing_distance 700. The active
  * package config deliberately overrides DPI to the car-tested value 125.
@@ -303,10 +300,10 @@ static void load_environment(void)
     value = getenv("GAL_SECONDARY_MARGINS");
     if (value != NULL && value[0] != 0) {
         unsigned w, h;
-        /* Even, and leaving at least half the frame. */
-        if (sscanf(value, "%ux%u", &w, &h) == 2 && w <= 400u && h <= 240u) {
-            g_config.margin_width = w & ~1u;
-            g_config.margin_height = h & ~1u;
+        /* Bound for a 1920x1080 frame; gal_hook_init checks the chosen frame. */
+        if (sscanf(value, "%ux%u", &w, &h) == 2 && w <= 1600u && h <= 920u) {
+            g_config.margin_width = w;
+            g_config.margin_height = h;
         }
     }
     {
@@ -319,6 +316,10 @@ static void load_environment(void)
             gal_hook_logf("event=config.crop result=invalid top=%s bottom=%s",
                           top_value != NULL ? top_value : "0",
                           bottom_value != NULL ? bottom_value : "0");
+        } else if ((crop_top != 0u || crop_bottom != 0u) &&
+                   (g_config.width != 800u || g_config.height != 480u)) {
+            gal_hook_logf("event=config.crop result=ignored reason=high_resolution_frame frame=%ux%u top=%u bottom=%u",
+                          g_config.width, g_config.height, crop_top, crop_bottom);
         } else if (crop_top != 0u || crop_bottom != 0u) {
             /* The player crops the uncropped frame; keep full-frame pixel aspect. */
             g_config.margin_width = 0u;
@@ -561,25 +562,53 @@ int gal_hook_init(const gal_secondary_config *config)
     g_cluster_input = environment_flag_default_on("GAL_DUALSCREEN_CLUSTER_INPUT");
 
     /*
-     * The cluster takes 800x480 and nothing else, so the resolution is not
-     * a tuning knob and is pinned here regardless of what was configured.
-     *
-     * VideoSink::codecResolutionToPixels (0xfa870 in libautoreceiver.so)
-     * maps codec_resolution enum 1 to exactly 800x480 and returns -8 for
-     * anything it does not recognise, and the captured discovery response
-     * from a working head unit declares enum 1 for its cluster sink. The
-     * hook already advertises VIDEO_CODEC_RESOLUTION_800_480 to the phone,
-     * so letting width/height say something else only desynchronises our
-     * own decoder from the stream the phone actually sends -- which is how
-     * the 400x400 attempt went wrong: 400x400 is a possible VISIBLE area
-     * inside the coded frame, not a coded-frame size. Outer margins are
-     * fixed to zero in this build; UiConfig carries the UI safe area.
+     * The secondary can use the resolution enum already present in the
+     * primary sink's configuration table. Other sizes would desynchronise
+     * the advertised stream from the player's decoder dimensions.
      */
-    if (g_config.width != 800u || g_config.height != 480u) {
-        gal_hook_logf("event=config.resolution result=pinned requested=%ux%u using=800x480 reason=cluster_accepts_only_800x480",
+    if (!((g_config.width == 800u && g_config.height == 480u) ||
+          (g_config.width == 1280u && g_config.height == 720u) ||
+          (g_config.width == 1920u && g_config.height == 1080u))) {
+        gal_hook_logf("event=config.resolution result=pinned requested=%ux%u using=800x480 reason=unsupported_frame_size",
                       g_config.width, g_config.height);
         g_config.width = 800u;
         g_config.height = 480u;
+    }
+    if (g_config.margin_width > g_config.width - 320u ||
+        g_config.margin_height > g_config.height - 160u) {
+        gal_hook_logf("event=config.margins result=dropped margins=%ux%u frame=%ux%u reason=visible_area_too_small",
+                      g_config.margin_width, g_config.margin_height,
+                      g_config.width, g_config.height);
+        g_config.margin_width = 0u;
+        g_config.margin_height = 0u;
+    }
+    /*
+     * High-resolution test frames leave the cockpit window's own pixels
+     * visible. Scale DPI and insets from Android Auto's 800x480 baseline to
+     * that visible area, as with the 720p test on AMDFX60's fork.
+     */
+    if ((g_config.width == 1280u || g_config.width == 1920u) &&
+        g_config.pixel_aspect_ratio_e4 <= 10000u && g_config.dpi <= 0x3fffu &&
+        g_config.insets_top <= 0x3fffu && g_config.insets_bottom <= 0x3fffu &&
+        g_config.insets_left <= 0x3fffu && g_config.insets_right <= 0x3fffu) {
+        unsigned visible_width = g_config.width - g_config.margin_width;
+        unsigned visible_height = g_config.height - g_config.margin_height;
+        unsigned factor = (visible_width * 480u > visible_height * 800u) ?
+            (visible_width * 10000u + 400u) / 800u :
+            (visible_height * 10000u + 240u) / 480u;
+        unsigned dpi = g_config.dpi;
+        unsigned top = g_config.insets_top, bottom = g_config.insets_bottom;
+        unsigned left = g_config.insets_left, right = g_config.insets_right;
+        g_config.dpi = (dpi * factor + 5000u) / 10000u;
+        g_config.insets_top = (top * factor + 5000u) / 10000u;
+        g_config.insets_bottom = (bottom * factor + 5000u) / 10000u;
+        g_config.insets_left = (left * factor + 5000u) / 10000u;
+        g_config.insets_right = (right * factor + 5000u) / 10000u;
+        gal_hook_logf("event=config.hd_frame result=scaled frame=%ux%u visible=%ux%u factor_e4=%u dpi=%u->%u insets=%u,%u,%u,%u->%u,%u,%u,%u",
+                      g_config.width, g_config.height, visible_width, visible_height,
+                      factor, dpi, g_config.dpi, top, bottom, left, right,
+                      g_config.insets_top, g_config.insets_bottom,
+                      g_config.insets_left, g_config.insets_right);
     }
     /*
      * Width and height are pinned above and can no longer be zero, so this
@@ -588,7 +617,7 @@ int gal_hook_init(const gal_secondary_config *config)
      * gentle degradation: the hook matches the primary's configuration
      * table on (resolution, fps) to build the secondary's entry, so an
      * unsupported rate makes that lookup fail and the secondary sink is
-     * never built at all, reported only as no_matching_800x480_fps.
+     * never built at all, reported as no_matching_resolution_fps.
      * Rejecting it here says so plainly instead.
      */
     if (g_config.fps != 30u && g_config.fps != 60u) {
