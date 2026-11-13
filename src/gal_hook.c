@@ -74,6 +74,7 @@ static gal_secondary_config g_config = {
     800u, 480u, 30u, 1u, 3u, 4u, 70u, 33u, 0u, 1u,
     140u, 700u, 10000u,
     40u, 40u, 127u, 127u,
+    { 0u, 0u, 0u, 0u }, { 0u, 0u, 0u, 0u }, 0u,
     0u, 0u, { 0 },
     0u, 0u
 };
@@ -345,6 +346,35 @@ static void load_environment(void)
     if (value != NULL) g_config.insets_left = (unsigned)strtoul(value, NULL, 0);
     value = getenv("GAL_SECONDARY_INSETS_RIGHT");
     if (value != NULL) g_config.insets_right = (unsigned)strtoul(value, NULL, 0);
+    g_config.classic_insets.top = g_config.insets_top;
+    g_config.classic_insets.bottom = g_config.insets_bottom;
+    g_config.classic_insets.left = g_config.insets_left;
+    g_config.classic_insets.right = g_config.insets_right;
+    g_config.large_insets = g_config.classic_insets;
+    value = getenv("GAL_SECONDARY_CLASSIC_INSETS");
+    if (value != NULL && value[0] != '\0' && strcmp(value, "auto") != 0) {
+        if (gal_view_insets_parse(&g_config.classic_insets.top,
+                                  &g_config.classic_insets.bottom,
+                                  &g_config.classic_insets.left,
+                                  &g_config.classic_insets.right, value)) {
+            g_config.view_insets_enabled = 1u;
+        } else {
+            gal_hook_logf("event=config.view_insets result=invalid mode=classic value=%s",
+                          value);
+        }
+    }
+    value = getenv("GAL_SECONDARY_LARGE_INSETS");
+    if (value != NULL && value[0] != '\0' && strcmp(value, "auto") != 0) {
+        if (gal_view_insets_parse(&g_config.large_insets.top,
+                                  &g_config.large_insets.bottom,
+                                  &g_config.large_insets.left,
+                                  &g_config.large_insets.right, value)) {
+            g_config.view_insets_enabled = 1u;
+        } else {
+            gal_hook_logf("event=config.view_insets result=invalid mode=large value=%s",
+                          value);
+        }
+    }
     value = getenv("GAL_SECONDARY_UI_THEME");
     if (value != NULL) g_config.ui_theme = (unsigned)strtoul(value, NULL, 0);
     value = getenv("GAL_SECONDARY_UI_CONFIG_HEX");
@@ -549,6 +579,21 @@ int gal_hook_init(const gal_secondary_config *config)
                       g_config.insets_top, g_config.insets_bottom,
                       g_config.insets_left, g_config.insets_right);
     }
+    if (g_config.view_insets_enabled &&
+        g_config.pixel_aspect_ratio_e4 > 10000u &&
+        g_config.pixel_aspect_ratio_e4 <= 80000u) {
+        gal_view_insets_scale(&g_config.classic_insets.top,
+                              &g_config.classic_insets.bottom,
+                              &g_config.classic_insets.left,
+                              &g_config.classic_insets.right,
+                              g_config.pixel_aspect_ratio_e4);
+        gal_view_insets_scale(&g_config.large_insets.top,
+                              &g_config.large_insets.bottom,
+                              &g_config.large_insets.left,
+                              &g_config.large_insets.right,
+                              g_config.pixel_aspect_ratio_e4);
+    }
+    (void)gal_hook_select_view_insets(&g_config, "init");
     g_enabled = environment_flag("GAL_DUALSCREEN_ENABLE");
     g_debug = environment_flag("GAL_DUALSCREEN_DEBUG");
     g_second_sink = environment_flag_default_on("GAL_DUALSCREEN_SECOND_SINK");
@@ -679,6 +724,31 @@ const char *gal_hook_output_mode_name(void)
 }
 int gal_hook_is_debug(void) { return g_debug; }
 const gal_secondary_config *gal_hook_config(void) { return &g_config; }
+
+int gal_hook_select_view_insets(gal_secondary_config *config, const char *context_tag)
+{
+    int selected;
+
+    if (config == NULL || !config->view_insets_enabled) return 0;
+    selected = gal_view_insets_select_from_file(config, GAL_VIEW_MODE_FILE);
+    if (selected == 0) return 0;
+    if (selected == -2) {
+        gal_hook_logf("event=config.view_insets result=read_failed context=%s errno=%d",
+                      context_tag != NULL ? context_tag : "unknown", errno);
+        return selected;
+    }
+    if (selected < 0) {
+        gal_hook_logf("event=config.view_insets result=invalid_state context=%s",
+                      context_tag != NULL ? context_tag : "unknown");
+        return selected;
+    }
+    gal_hook_logf("event=config.view_insets result=selected context=%s mode=%s insets=%u,%u,%u,%u",
+                  context_tag != NULL ? context_tag : "unknown",
+                  selected == 1 ? "classic" : "large",
+                  config->insets_top, config->insets_bottom,
+                  config->insets_left, config->insets_right);
+    return selected;
+}
 
 static pid_t g_main_pid = 0;
 

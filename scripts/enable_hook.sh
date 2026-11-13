@@ -753,41 +753,61 @@ fi
 # visible (Golf R: card and car under the dials).
 CARPLAY_SAFEAREA=$APP_MOUNT/root/mibr-carplay111-safearea.conf
 if [ "$CARPLAY_OK" -eq 1 ]; then
-    # CLUSTERMAP_CARPLAY_INSETS (same four numbers) moves only CarPlay's
-    # safe area, so Android Auto keeps GAL_SECONDARY_INSETS (#19: the ETA
-    # line under the SEAT dials).
-    INSETS=`sed -n 's/^CLUSTERMAP_CARPLAY_INSETS=\([0-9]*\),\([0-9]*\),\([0-9]*\),\([0-9]*\)[ 	]*$/\1 \2 \3 \4/p' \
+    LEGACY_INSETS=`sed -n 's/^GAL_SECONDARY_INSETS=\([0-9]*\),\([0-9]*\),\([0-9]*\),\([0-9]*\)[ 	]*$/\1 \2 \3 \4/p' \
         "$PRELOAD_WRITE_DIR/gal_dualscreen.conf" 2>/dev/null | tail -1`
-    if [ -n "$INSETS" ]; then
+    CLASSIC_INSETS=`sed -n 's/^GAL_SECONDARY_CLASSIC_INSETS=\([0-9]*\),\([0-9]*\),\([0-9]*\),\([0-9]*\)[ 	]*$/\1 \2 \3 \4/p' \
+        "$PRELOAD_WRITE_DIR/gal_dualscreen.conf" 2>/dev/null | tail -1`
+    LARGE_INSETS=`sed -n 's/^GAL_SECONDARY_LARGE_INSETS=\([0-9]*\),\([0-9]*\),\([0-9]*\),\([0-9]*\)[ 	]*$/\1 \2 \3 \4/p' \
+        "$PRELOAD_WRITE_DIR/gal_dualscreen.conf" 2>/dev/null | tail -1`
+    CP_INSETS=`sed -n 's/^CLUSTERMAP_CARPLAY_INSETS=\([0-9]*\),\([0-9]*\),\([0-9]*\),\([0-9]*\)[ 	]*$/\1 \2 \3 \4/p' \
+        "$PRELOAD_WRITE_DIR/gal_dualscreen.conf" 2>/dev/null | tail -1`
+    LEGACY_INSETS=${LEGACY_INSETS:-40 40 127 127}
+    if [ -n "$CP_INSETS" ]; then
+        CLASSIC_INSETS=$CP_INSETS
+        LARGE_INSETS=$CP_INSETS
         echo "CarPlay map: insets from CLUSTERMAP_CARPLAY_INSETS"
     else
-        INSETS=`sed -n 's/^GAL_SECONDARY_INSETS=\([0-9]*\),\([0-9]*\),\([0-9]*\),\([0-9]*\)[ 	]*$/\1 \2 \3 \4/p' \
-            "$PRELOAD_WRITE_DIR/gal_dualscreen.conf" 2>/dev/null | tail -1`
+        [ -n "$CLASSIC_INSETS" ] || CLASSIC_INSETS=$LEGACY_INSETS
+        [ -n "$LARGE_INSETS" ] || LARGE_INSETS=$LEGACY_INSETS
     fi
-    set -- ${INSETS:-40 40 127 127}
-    # The insets count from the edge of the whole 800x480 frame, margins of
-    # the band included; CarPlay has no margins, so take them off first (SEAT
-    # and Skoda: 91 px top and bottom, which had made the safe area too
-    # small). BAND_MARGIN, not MARGIN: with CLUSTERMAP_FULL_FRAME the Android
-    # Auto margins are 0, but the insets are still set for the band, and
-    # CarPlay knows nothing of full frame.
-    IN_T=`expr $1 - $BAND_MARGIN_H / 2 || :`; [ "$IN_T" -lt 0 ] && IN_T=0
-    IN_B=`expr $2 - $BAND_MARGIN_H / 2 || :`; [ "$IN_B" -lt 0 ] && IN_B=0
-    IN_L=`expr $3 - $BAND_MARGIN_W / 2 || :`; [ "$IN_L" -lt 0 ] && IN_L=0
-    IN_R=`expr $4 - $BAND_MARGIN_W / 2 || :`; [ "$IN_R" -lt 0 ] && IN_R=0
-    SAFE_Y=`expr $IN_T \* $CP_H / \( 480 - $BAND_MARGIN_H \) || :`
-    SAFE_B=`expr $IN_B \* $CP_H / \( 480 - $BAND_MARGIN_H \) || :`
-    SAFE_X=`expr $IN_L \* $CP_W / \( 800 - $BAND_MARGIN_W \) || :`
-    SAFE_R=`expr $IN_R \* $CP_W / \( 800 - $BAND_MARGIN_W \) || :`
-    SAFE_W=`expr $CP_W - $SAFE_X - $SAFE_R || :`
-    SAFE_H=`expr $CP_H - $SAFE_Y - $SAFE_B || :`
-    # echo, not printf: some units have no printf binary
-    if [ "$SAFE_W" -ge 160 ] && [ "$SAFE_H" -ge 120 ] &&
-       { echo "x=$SAFE_X"; echo "y=$SAFE_Y"; echo "w=$SAFE_W"; echo "h=$SAFE_H"; } > "$CARPLAY_SAFEAREA"; then
-        echo "CarPlay map: safe area ${SAFE_W}x${SAFE_H} at ${SAFE_X},${SAFE_Y} (from the insets)"
+    safearea_from_insets() {
+        set -- $1
+        [ $# -eq 4 ] || return 1
+        # Insets include the Android Auto band's margins. CarPlay's display
+        # has none, so remove them and scale to its advertised geometry.
+        IN_T=`expr $1 - $BAND_MARGIN_H / 2 || :`; [ "$IN_T" -lt 0 ] && IN_T=0
+        IN_B=`expr $2 - $BAND_MARGIN_H / 2 || :`; [ "$IN_B" -lt 0 ] && IN_B=0
+        IN_L=`expr $3 - $BAND_MARGIN_W / 2 || :`; [ "$IN_L" -lt 0 ] && IN_L=0
+        IN_R=`expr $4 - $BAND_MARGIN_W / 2 || :`; [ "$IN_R" -lt 0 ] && IN_R=0
+        SAFE_Y=`expr $IN_T \* $CP_H / \( 480 - $BAND_MARGIN_H \) || :`
+        SAFE_B=`expr $IN_B \* $CP_H / \( 480 - $BAND_MARGIN_H \) || :`
+        SAFE_X=`expr $IN_L \* $CP_W / \( 800 - $BAND_MARGIN_W \) || :`
+        SAFE_R=`expr $IN_R \* $CP_W / \( 800 - $BAND_MARGIN_W \) || :`
+        SAFE_W=`expr $CP_W - $SAFE_X - $SAFE_R || :`
+        SAFE_H=`expr $CP_H - $SAFE_Y - $SAFE_B || :`
+        [ "$SAFE_W" -ge 160 ] && [ "$SAFE_H" -ge 120 ] || return 1
+        echo "$SAFE_X $SAFE_Y $SAFE_W $SAFE_H"
+    }
+    write_safearea_values() {
+        AREA_MODE=$1
+        AREA_VALUES=$2
+        set -- $AREA_VALUES
+        [ $# -eq 4 ] || return 1
+        echo "${AREA_MODE}_x=$1"
+        echo "${AREA_MODE}_y=$2"
+        echo "${AREA_MODE}_w=$3"
+        echo "${AREA_MODE}_h=$4"
+    }
+    CLASSIC_SAFE=`safearea_from_insets "$CLASSIC_INSETS" || echo "0 0 $CP_W $CP_H"`
+    LARGE_SAFE=`safearea_from_insets "$LARGE_INSETS" || echo "0 0 $CP_W $CP_H"`
+    if {
+        write_safearea_values classic "$CLASSIC_SAFE" &&
+        write_safearea_values large "$LARGE_SAFE"
+    } > "$CARPLAY_SAFEAREA"; then
+        echo "CarPlay map: Classic safe area $CLASSIC_SAFE; Large safe area $LARGE_SAFE"
     else
         rm -f "$CARPLAY_SAFEAREA"
-        echo "CarPlay map: insets leave too little of the window; using all of it"
+        echo "WARNING: could not write CarPlay safe-area config; using the full window." >&2
     fi
 else
     rm -f "$CARPLAY_SAFEAREA" 2>/dev/null || true
@@ -1421,6 +1441,64 @@ else
         echo "Turn info: road name on the cockpit: $TURN_TEXT"
     elif [ -f "$TURN_TEXT_FILE" ]; then
         mount -uw /mnt/app 2>/dev/null && { rm -f "$TURN_TEXT_FILE"; mount -ur /mnt/app 2>/dev/null || true; }
+    fi
+fi
+
+# ---- AU37x P5089: report the Virtual Cockpit View-button mode -------------
+# This patch is built against the supplied AU37x lsd.jxe snapshot. Its
+# CombiMapController hook publishes "classic" or "large" in /tmp for both
+# native phone hooks to consume.
+VIEWINSETS_JAR=ClusterMapViewInsets.jar
+VIEWINSETS_MARKER=/mnt/app/eso/hmi/lsd/.aacluster_viewinsets_added
+VIEWINSETS_LSD_SIZE=60645336
+VIEWINSETS_LSD=`wc -c < /ifs/lsd.jxe 2>/dev/null | sed 's/ //g'`
+VIEWINSETS_WHY=
+if ! train_has "$PROFILES" "$TRAIN" viewinsets; then
+    VIEWINSETS_WHY="not enabled for $TRAIN"
+elif [ "$VIEWINSETS_LSD" != "$VIEWINSETS_LSD_SIZE" ]; then
+    VIEWINSETS_WHY="this unit's interface (lsd.jxe, ${VIEWINSETS_LSD:-unreadable} bytes) is not the $VIEWINSETS_LSD_SIZE-byte P5089 snapshot"
+elif [ ! -r "$CARD_ROOT/thirdparty/$VIEWINSETS_JAR" ] ||
+     [ ! -r "$LSD_SH" ] || [ ! -r "$CARD_ROOT/lsd_jar.sh" ]; then
+    VIEWINSETS_WHY="the P5089 hook or Java installer is not in this package"
+fi
+if [ -z "$VIEWINSETS_WHY" ]; then
+    VIEWINSETS_HAVE=`wc -c < /mnt/app/eso/hmi/lsd/jars/$VIEWINSETS_JAR 2>/dev/null | sed 's/ //g'`
+    VIEWINSETS_WANT=`wc -c < "$CARD_ROOT/thirdparty/$VIEWINSETS_JAR" 2>/dev/null | sed 's/ //g'`
+    if sh "$CARD_ROOT/lsd_jar.sh" loaded "$VIEWINSETS_JAR"; then
+        if [ -f "$VIEWINSETS_MARKER" ] && [ "$VIEWINSETS_HAVE" != "$VIEWINSETS_WANT" ]; then
+            if sh "$CARD_ROOT/lsd_jar.sh" add "$VIEWINSETS_JAR" "$CARD_ROOT/thirdparty/$VIEWINSETS_JAR"; then
+                echo "Java check: updated the P5089 View-button hook."
+            else
+                echo "WARNING: could not update $VIEWINSETS_JAR; the loaded copy was left unchanged." >&2
+            fi
+        elif [ "$VIEWINSETS_HAVE" = "$VIEWINSETS_WANT" ]; then
+            echo "Java check: P5089 View-button hook is loaded."
+        else
+            echo "WARNING: another $VIEWINSETS_JAR is loaded; left it unchanged." >&2
+        fi
+    elif sh "$CARD_ROOT/lsd_jar.sh" add "$VIEWINSETS_JAR" "$CARD_ROOT/thirdparty/$VIEWINSETS_JAR"; then
+        mount -uw /mnt/app 2>/dev/null && {
+            : > "$VIEWINSETS_MARKER"
+            mount -ur /mnt/app 2>/dev/null || true
+        }
+        echo "Java check: added the P5089 View-button hook."
+    else
+        echo "WARNING: could not add $VIEWINSETS_JAR; view-dependent insets are not active." >&2
+    fi
+else
+    if [ -f "$VIEWINSETS_MARKER" ] &&
+       sh "$CARD_ROOT/lsd_jar.sh" loaded "$VIEWINSETS_JAR"; then
+        if sh "$CARD_ROOT/lsd_jar.sh" remove "$VIEWINSETS_JAR"; then
+            mount -uw /mnt/app 2>/dev/null && {
+                rm -f "$VIEWINSETS_MARKER"
+                mount -ur /mnt/app 2>/dev/null || true
+            }
+        else
+            echo "WARNING: could not remove $VIEWINSETS_JAR; lsd.sh is unchanged." >&2
+        fi
+    fi
+    if train_has "$PROFILES" "$TRAIN" viewinsets; then
+        echo "WARNING: View-button inset hook not installed: $VIEWINSETS_WHY." >&2
     fi
 fi
 

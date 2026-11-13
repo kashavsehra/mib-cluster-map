@@ -592,9 +592,17 @@ static size_t build_insets_payload(unsigned char *out, size_t max_out,
 
 static void apply_video_config_insets(void *vconf, const gal_secondary_config *config, const char *context_tag)
 {
+    gal_secondary_config effective_config;
     unsigned char *obj;
     unsigned char payload[16];
     size_t payload_len;
+
+    if (config != NULL) {
+        effective_config = *config;
+        (void)gal_hook_select_view_insets(&effective_config, context_tag);
+        config = &effective_config;
+    }
+
     uint32_t top = (config != NULL) ? config->insets_top : 40u;
     uint32_t bottom = (config != NULL) ? config->insets_bottom : 40u;
     uint32_t left = (config != NULL) ? config->insets_left : 127u;

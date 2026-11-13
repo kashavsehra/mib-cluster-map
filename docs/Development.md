@@ -62,7 +62,12 @@ These shaped the design; changing them has broken things before.
   `GL_SHADER_COMPILER == 0`, hence `glDrawTextureNV`.
 - **Java patches need an IBM Java 1.2-level compiler.** The interface runs on
   IBM J9; classes from a modern `javac` fail verification and the centre
-  screen does not start.
+  screen does not start. The optional P5089 View-button patch is built against
+  a locally converted stock `lsd.jar`; its builder injects calls into the
+  verified `CombiMapController` callbacks and downgrades the helper class to
+  version 46. Run `./build_local.sh viewinsets /path/to/converted-lsd.jar`.
+  The installer loads it only for the P5089 profile and its matching
+  60,645,336-byte `lsd.jxe`.
 - **The turn-arrows jar breaks the map.** With `VCAndroidAuto.jar` loaded, the
   cluster map goes blank when a route starts, so the installer removes it for
   the map. NavActiveIgnore is needed so a phone route does not end the
@@ -186,6 +191,14 @@ cd ../mib-cluster-map
 ```
 
 FFmpeg 6.1.5 is downloaded, checked and built on first use.
+
+The P5089 View-button inset patch is optional because the converted stock HMI
+classes are firmware files and are not in the repository. Build it as shown
+above and package it with `./build_local.sh package`. Its focused verification
+is `bash tests/viewinsets_check.sh /path/to/converted-lsd.jar`. Android Auto
+chooses the active inset set when it discovers the phone's cluster display;
+after switching cockpit view, reconnect the phone. CarPlay can change safe
+areas while connected.
 
 ## Testing on a car
 

@@ -226,15 +226,19 @@ skipped. `stream-player.log` says `asked the phone for a keyframe` and
 `the picture jumps to the present`.
 
 The iPhone keeps the car and its instruction card inside a safe area. The
-installer writes it to `/mnt/app/root/mibr-carplay111-safearea.conf` from
-`GAL_SECONDARY_INSETS`, the same setting that keeps the Android Auto map
-clear of the dials, less Android Auto's margins and scaled to the window
+installer writes Classic and Large areas to
+`/mnt/app/root/mibr-carplay111-safearea.conf` from
+`GAL_SECONDARY_CLASSIC_INSETS` and `GAL_SECONDARY_LARGE_INSETS` (top, bottom,
+left, right), falling back independently to `GAL_SECONDARY_INSETS`. The values
+are adjusted for Android Auto's margins and scaled to the CarPlay window
 (800x480 with the default insets: 546x400 at 127,40; SEAT 1010x376: 690x314
 at 160,17). Until beta14 the margins were not taken off, which on SEAT and
 Skoda left too little and the whole window was used.
-`CLUSTERMAP_CARPLAY_INSETS` (same four numbers) replaces
-`GAL_SECONDARY_INSETS` for CarPlay only, for when the arrival line sits under
-the dials but the Android Auto map is right (#19).
+On the supported P5089 build, its Java View-button hook publishes the mode;
+the CarPlay hook then requests the matching safe area live without reconnecting.
+`CLUSTERMAP_CARPLAY_INSETS` (same four numbers) overrides both mode-specific
+sets for CarPlay only, for when the arrival line sits under the dials but the
+Android Auto map is right (#19).
 
 An iPhone that knew the car before the install keeps its old idea of the car
 and never asks for the cluster stream (Golf R). Once after installing: on the

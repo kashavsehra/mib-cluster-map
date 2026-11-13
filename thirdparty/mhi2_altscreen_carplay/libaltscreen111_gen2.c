@@ -252,6 +252,7 @@ static int g_auto_show = 0;
 static int g_viewareas = 1;
 static const char *g_viewareas_marker = "/mnt/app/root/mibr-carplay111-viewareas.enabled";
 static const char *g_safearea_config_path = "/mnt/app/root/mibr-carplay111-safearea.conf";
+static const char *g_view_mode_path = "/tmp/clustermap-view-mode";
 static const char *g_autoshow_disable_marker = "/mnt/app/root/mibr-carplay111-autoshow.disabled";
 static const char *g_url_map_marker = "/mnt/app/root/mibr-carplay111-url-map.enabled";
 static const char *g_url_mode_path = "/tmp/mibr-alt111-url-mode";
@@ -552,14 +553,43 @@ static int read_trimmed_value(const char *path, char *out, size_t cap)
     return n > 0 ? 0 : -1;
 }
 
-static void load_safearea_config(int *x, int *y, int *w, int *h)
+static CFMutableDictionaryRef dict_new(void);
+static void set_i64(CFMutableDictionaryRef d, const char *key, int64_t val);
+static void set_false(CFMutableDictionaryRef d, const char *key);
+
+struct safearea_rect {
+    int x, y, w, h;
+};
+
+static unsigned vc_view_index(unsigned fallback)
+{
+    char mode[32];
+
+    if (read_trimmed_value(g_view_mode_path, mode, sizeof(mode)) != 0) return fallback;
+    if (strcmp(mode, "classic") == 0) return 0u;
+    if (strcmp(mode, "large") == 0) return 1u;
+    return fallback;
+}
+
+static int safearea_valid(const struct safearea_rect *r)
+{
+    return r->x >= 0 && r->y >= 0 && r->w >= 1 && r->h >= 1 &&
+        r->x < g_width && r->y < g_height &&
+        r->w <= g_width - r->x && r->h <= g_height - r->y;
+}
+
+static void load_safearea_config(struct safearea_rect *classic,
+                                 struct safearea_rect *large)
 {
     char b[192];
     int fd, n;
-    int tx=0, ty=0, tw=g_width, th=g_height;
+    int values[8];
 
-    if(!x||!y||!w||!h) return;
-    *x=0; *y=0; *w=g_width; *h=g_height;
+    if(!classic||!large) return;
+    classic->x=large->x=0;
+    classic->y=large->y=0;
+    classic->w=large->w=g_width;
+    classic->h=large->h=g_height;
 
     fd=open(g_safearea_config_path,O_RDONLY);
     if(fd<0) return;
@@ -568,20 +598,69 @@ static void load_safearea_config(int *x, int *y, int *w, int *h)
     if(n<=0) return;
     b[n]='\0';
 
-    if(sscanf(b,"x=%d\ny=%d\nw=%d\nh=%d",&tx,&ty,&tw,&th)!=4){
+    if(sscanf(b,
+              "classic_x=%d\nclassic_y=%d\nclassic_w=%d\nclassic_h=%d\n"
+              "large_x=%d\nlarge_y=%d\nlarge_w=%d\nlarge_h=%d",
+              &values[0],&values[1],&values[2],&values[3],
+              &values[4],&values[5],&values[6],&values[7])==8){
+        classic->x=values[0]; classic->y=values[1];
+        classic->w=values[2]; classic->h=values[3];
+        large->x=values[4]; large->y=values[5];
+        large->w=values[6]; large->h=values[7];
+    }else if(sscanf(b,"x=%d\ny=%d\nw=%d\nh=%d",
+                    &values[0],&values[1],&values[2],&values[3])==4){
+        classic->x=large->x=values[0];
+        classic->y=large->y=values[1];
+        classic->w=large->w=values[2];
+        classic->h=large->h=values[3];
+    }else{
         logf_u2("GEN2 SafeArea config invalid path=%s; using full canvas",
                 g_safearea_config_path);
         return;
     }
 
-    if(tx<0||ty<0||tw<1||th<1||tx>=g_width||ty>=g_height||
-       tx+tw>g_width||ty+th>g_height){
-        logf_u2("GEN2 SafeArea config out-of-range x=%d y=%d w=%d h=%d full=%dx%d; using full canvas",
-                tx,ty,tw,th,g_width,g_height);
-        return;
+    if(!safearea_valid(classic)){
+        logf_u2("GEN2 classic SafeArea out-of-range x=%d y=%d w=%d h=%d full=%dx%d; using full canvas",
+                classic->x,classic->y,classic->w,classic->h,g_width,g_height);
+        classic->x=classic->y=0; classic->w=g_width; classic->h=g_height;
     }
+    if(!safearea_valid(large)){
+        logf_u2("GEN2 large SafeArea out-of-range x=%d y=%d w=%d h=%d full=%dx%d; using full canvas",
+                large->x,large->y,large->w,large->h,g_width,g_height);
+        large->x=large->y=0; large->w=g_width; large->h=g_height;
+    }
+}
 
-    *x=tx; *y=ty; *w=tw; *h=th;
+static void append_viewarea(CFMutableArrayRef areas, const struct safearea_rect *r)
+{
+    CFMutableDictionaryRef view=NULL,safe=NULL;
+    CFStringRef k=NULL;
+
+    if(!areas||!r) return;
+    view=dict_new();
+    safe=dict_new();
+    if(!view||!safe) goto done;
+
+    set_i64(view,"widthPixels",g_width);
+    set_i64(view,"heightPixels",g_height);
+    set_i64(view,"originXPixels",0);
+    set_i64(view,"originYPixels",0);
+    set_i64(safe,"widthPixels",r->w);
+    set_i64(safe,"heightPixels",r->h);
+    set_i64(safe,"originXPixels",r->x);
+    set_i64(safe,"originYPixels",r->y);
+    set_false(view,"drawUIOutsideSafeArea");
+    set_false(view,"viewAreaTransitionControl");
+    k=s_cf("safeArea");
+    if(!k) goto done;
+    p_CFDictionarySetValue(view,k,safe);
+    p_CFRelease(k); k=NULL;
+    p_CFArrayAppendValue(areas,view);
+
+done:
+    if(k)p_CFRelease(k);
+    if(safe)p_CFRelease(safe);
+    if(view)p_CFRelease(view);
 }
 
 static const char *nav_surface_url(char *surface, size_t surface_cap)
@@ -1834,10 +1913,10 @@ done:
  */
 static void add_reference_viewarea(CFMutableDictionaryRef alt)
 {
-    CFMutableDictionaryRef view=NULL,safe=NULL;
     CFMutableArrayRef areas=NULL;
     CFStringRef k=NULL;
-    int safe_w,safe_h,safe_x,safe_y;
+    struct safearea_rect classic,large;
+    unsigned initial_view;
 
     if(!alt || g_width<=0 || g_height<=0) return;
 
@@ -1847,47 +1926,24 @@ static void add_reference_viewarea(CFMutableDictionaryRef alt)
      * tuned without recompiling again.  Clamp every value to the advertised
      * 1010x376 display canvas; malformed/out-of-range files fall back safely.
      */
-    load_safearea_config(&safe_x,&safe_y,&safe_w,&safe_h);
-
-    view=dict_new();
-    safe=dict_new();
+    load_safearea_config(&classic,&large);
+    initial_view=vc_view_index(g2_profile.initial_view);
     areas=p_CFArrayCreateMutable(NULL,0,p_array_callbacks);
-    if(!view||!safe||!areas) goto done;
-
-    set_i64(view,"widthPixels",g_width);
-    set_i64(view,"heightPixels",g_height);
-    set_i64(view,"originXPixels",0);
-    set_i64(view,"originYPixels",0);
-
-    set_i64(safe,"widthPixels",safe_w);
-    set_i64(safe,"heightPixels",safe_h);
-    set_i64(safe,"originXPixels",safe_x);
-    set_i64(safe,"originYPixels",safe_y);
-
-    /*
-     * These are ViewArea policy booleans, not numeric zero values. MIBSI
-     * serializes both as real CFBoolean false objects.
-     */
-    set_false(view,"drawUIOutsideSafeArea");
-    set_false(view,"viewAreaTransitionControl");
-
-    k=s_cf("safeArea");
-    p_CFDictionarySetValue(view,k,safe);
-    p_CFRelease(k); k=NULL;
-
-    p_CFArrayAppendValue(areas,view);
+    if(!areas) goto done;
+    append_viewarea(areas,&classic);
+    if(g2_profile.view_count > 1u) append_viewarea(areas,&large);
+    if(p_CFArrayGetCount(areas) != (CFIndex)g2_profile.view_count) goto done;
     k=s_cf("viewAreas");
     p_CFDictionarySetValue(alt,k,areas);
     p_CFRelease(k); k=NULL;
-    set_i64(alt,"initialViewArea",0);
-    logf_u2("GEN2 ViewArea full=%dx%d safe=%dx%d@%d,%d",
-            g_width,g_height,safe_w,safe_h,safe_x,safe_y);
+    set_i64(alt,"initialViewArea",initial_view);
+    logf_u2("GEN2 ViewArea full=%dx%d classic=%dx%d@%d,%d large=%dx%d@%d,%d initial=%u",
+            g_width,g_height,classic.w,classic.h,classic.x,classic.y,
+            large.w,large.h,large.x,large.y,initial_view);
 
 done:
     if(k)p_CFRelease(k);
     if(areas)p_CFRelease(areas);
-    if(safe)p_CFRelease(safe);
-    if(view)p_CFRelease(view);
 }
 
 static void log_stream_types(const char *tag, CFDictionaryRef request)
@@ -2525,13 +2581,15 @@ static void gen2_set_command_ready(unsigned ready)
 static void gen2_control_projection_on(void)
 {
     int repeated = 0, rrc = ALT111_OK;
+    unsigned initial_view = g2_profile.view_count > 1u ?
+        vc_view_index(g2_profile.initial_view) : 0u;
     pthread_mutex_lock(&g2_core_lock);
     if (!g2_control_session) {
         g2_control_session = alt111_control_begin(&g2_control);
     } else {
         repeated = 1;
     }
-    (void)alt111_control_intent(&g2_control,1,0);
+    (void)alt111_control_intent(&g2_control,1,initial_view);
     if (repeated)
         rrc = alt111_control_reacquire(&g2_control,g2_control_session);
     pthread_cond_broadcast(&g2_core_cv);
@@ -2928,6 +2986,28 @@ static void gen2_process_diag_markers(void)
     }
 }
 
+static void gen2_sync_view_mode(void)
+{
+    unsigned view;
+    int rc;
+
+    if(g2_profile.view_count < 2u) return;
+    view=vc_view_index(g2_profile.initial_view);
+    pthread_mutex_lock(&g2_core_lock);
+    if(!g2_control_session || !g2_control.desired ||
+       g2_control.desired_view == view){
+        pthread_mutex_unlock(&g2_core_lock);
+        return;
+    }
+    rc=alt111_control_intent(&g2_control,1,view);
+    pthread_cond_broadcast(&g2_core_cv);
+    pthread_mutex_unlock(&g2_core_lock);
+    if(rc==ALT111_OK)
+        logf_u2("gen2 VC view changed; requested ViewArea index=%u",view);
+    else
+        logf_u2("gen2 VC view change rejected index=%u rc=%d",view,rc);
+}
+
 static void *gen2_control_worker(void *arg)
 {
     (void)arg;
@@ -2949,6 +3029,7 @@ static void *gen2_control_worker(void *arg)
 
         gen2_resync_poll();
         gen2_process_diag_markers();
+        gen2_sync_view_mode();
 
         if(access(g2_reacquire_marker,F_OK)==0){
             unlink(g2_reacquire_marker);
@@ -3684,9 +3765,12 @@ static void altscreen111_init(void)
     g2_profile.width_mm=(uint32_t)g_width_mm;
     g2_profile.height_mm=(uint32_t)g_height_mm;
     g2_profile.max_fps=(uint32_t)g_fps;
+    g2_profile.view_count=g_viewareas ? 2u : 1u;
+    g2_profile.initial_view=g_viewareas ? vc_view_index(0u) : 0u;
     g2_profile.views[0].area.width=g2_profile.width;
     g2_profile.views[0].area.height=g2_profile.height;
     g2_profile.views[0].safe=g2_profile.views[0].area;
+    g2_profile.views[1]=g2_profile.views[0];
     if(alt111_profile_validate(&g2_profile)!=ALT111_OK){
         g_enabled=0;
         logf_u2("gen2 runtime profile validation failed; disabled fail-closed");

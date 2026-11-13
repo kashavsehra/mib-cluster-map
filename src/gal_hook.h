@@ -27,6 +27,13 @@ typedef struct gal_secondary_config {
     unsigned insets_bottom;
     unsigned insets_left;
     unsigned insets_right;
+    struct {
+        unsigned top;
+        unsigned bottom;
+        unsigned left;
+        unsigned right;
+    } classic_insets, large_insets;
+    unsigned view_insets_enabled;
     unsigned ui_theme;
     unsigned ui_config_payload_len;
     unsigned char ui_config_payload[16];
@@ -37,7 +44,16 @@ typedef struct gal_secondary_config {
     unsigned margin_height;
 } gal_secondary_config;
 
+#define GAL_VIEW_MODE_FILE "/tmp/clustermap-view-mode"
+
 int gal_hook_init(const gal_secondary_config *config);
+int gal_hook_select_view_insets(gal_secondary_config *config, const char *context_tag);
+int gal_view_insets_parse(unsigned *top, unsigned *bottom, unsigned *left,
+                          unsigned *right, const char *value);
+int gal_view_insets_select_from_file(gal_secondary_config *config,
+                                     const char *path);
+void gal_view_insets_scale(unsigned *top, unsigned *bottom, unsigned *left,
+                           unsigned *right, unsigned pixel_aspect_ratio_e4);
 void gal_hook_log(const char *message);
 void gal_hook_logf(const char *format, ...);
 void gal_hook_debugf(const char *format, ...);

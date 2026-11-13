@@ -5,7 +5,8 @@
 #   ./build_local.sh            build everything and assemble dist/sdcard
 #   ./build_local.sh hook       only libgal_hook.so + libdmdt_flush.so
 #   ./build_local.sh player     only stream-player (builds ffmpeg-mini on first use)
-#   ./build_local.sh java       only ClusterMapWheelZoom.jar (host JDK 8 or newer)
+#   ./build_local.sh java       Java patches (optionally AU37x with AU37X_LSD_JAR)
+#   ./build_local.sh viewinsets <converted-lsd.jar>   build the P5089 View-button hook
 #
 # Output: dist/sdcard/ (copy its CONTENTS to the SD card root) and a release zip in dist/.
 set -euo pipefail
@@ -39,7 +40,7 @@ build_hook() {
     $P-strip --strip-debug build/libgal_hook.so build/libdmdt_flush.so
     echo "--- exported symbols that are not ours (must be empty):"
     bad=$($P-nm -D --defined-only build/libgal_hook.so | awk "{print \$3}" | \
-          grep -Ev "^(_ZN|gal_hook_|fc_|vc_|hook_fix_enabled|_init|_fini|__bss|_edata|_end|__end__|_bss_end__|__bss_start__|__bss_end__|__data_start|__exidx_start|__exidx_end|_btext|_stack)" || true)
+          grep -Ev "^(_ZN|gal_hook_|gal_view_insets_|fc_|vc_|hook_fix_enabled|_init|_fini|__bss|_edata|_end|__end__|_bss_end__|__bss_start__|__bss_end__|__data_start|__exidx_start|__exidx_end|_btext|_stack)" || true)
     echo "$bad"
     [ -z "$bad" ] || { echo "REJECTED: unexpected exports"; exit 1; }
     n=$($P-nm build/libgal_hook.so | grep -ci emutls || true)
@@ -94,6 +95,17 @@ build_java() {
   # the host (no QNX tools involved). tests/wheelzoom_check.sh checks it
   # against a converted stock lsd.jar, which is not in the repository.
   "$ROOT/java/wheelzoom/build.sh" "$ROOT/build"
+  if [ -n "${AU37X_LSD_JAR:-}" ]; then
+    "$ROOT/java/viewinsets/build.sh" "$AU37X_LSD_JAR" "$ROOT/build"
+  else
+    rm -f "$ROOT/build/ClusterMapViewInsets.jar"
+    echo "Skipping P5089 View-button hook; set AU37X_LSD_JAR to a converted stock lsd.jar."
+  fi
+}
+
+build_viewinsets() {
+  local stock=${2:-${AU37X_LSD_JAR:-}}
+  "$ROOT/java/viewinsets/build.sh" "$stock" "$ROOT/build"
 }
 
 package() {
@@ -108,6 +120,10 @@ package() {
   mkdir -p "$D/carplay"
   cp "$ROOT/build/libcarplay_cluster.so" "$ROOT/carplay/carplay_cluster.sh" "$D/carplay/"
   cp "$ROOT/build/ClusterMapWheelZoom.jar" "$D/carplay/"
+  mkdir -p "$D/thirdparty"
+  if [ -r "$ROOT/build/ClusterMapViewInsets.jar" ]; then
+    cp "$ROOT/build/ClusterMapViewInsets.jar" "$D/thirdparty/"
+  fi
   cp "$ROOT/thirdparty/mhi2_altscreen_carplay/LICENSE" "$D/carplay/mhi2_altscreen_carplay.LICENSE"
   # The install scripts treat their own folder as the package root.
   cp "$ROOT"/scripts/enable_hook.sh "$ROOT"/scripts/disable_hook.sh "$ROOT"/scripts/collect_logs.sh \
@@ -153,7 +169,8 @@ package() {
   python3 "$ROOT/tools/check_scripts.py" "$D" || { echo "REJECTED: scripts use something units lack"; exit 1; }
   bad=$(perl -ne 'if (/\r|[^\x00-\x7F]/) { print "$ARGV\n"; close ARGV }' "$D"/*.sh "$D"/scripts/*.sh "$D"/GEM/*.sh "$D"/final/*.sh "$D"/carplay/*.sh "$S"/Custom/GreenMenu/*.esd "$D"/gal_dualscreen.conf | sort -u)
   [ -z "$bad" ] || { echo "REJECTED: CR or non-ASCII in: $bad"; exit 1; }
-  (cd "$D" && shasum -a 256 libgal_hook.so stream-player profile_check profiles.conf lib/libdmdt_flush.so carplay/libcarplay_cluster.so carplay/ClusterMapWheelZoom.jar > SHA256SUMS.txt)
+  (cd "$D" && shasum -a 256 libgal_hook.so stream-player profile_check profiles.conf lib/libdmdt_flush.so carplay/libcarplay_cluster.so carplay/ClusterMapWheelZoom.jar > SHA256SUMS.txt
+   if [ -r thirdparty/ClusterMapViewInsets.jar ]; then shasum -a 256 thirdparty/ClusterMapViewInsets.jar >> SHA256SUMS.txt; fi)
   python3 "$ROOT/tools/make_metainfo.py" "$S" "${RELEASE_VERSION:-$BUILD_ID}"
   VER=${RELEASE_VERSION:-$BUILD_ID}
   Z="$ROOT/dist/mib-cluster-map_$VER.zip"
@@ -168,7 +185,8 @@ case "$WHAT" in
   hook) build_hook ;;
   player) build_player ;;
   java) build_java ;;
+  viewinsets) build_viewinsets "$@" ;;
   all) build_hook; build_player; build_java; package ;;
   package) package ;;
-  *) echo "usage: $0 [all|hook|player|java|package]"; exit 2 ;;
+  *) echo "usage: $0 [all|hook|player|java|viewinsets <converted-lsd.jar>|package]"; exit 2 ;;
 esac

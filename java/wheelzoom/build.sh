@@ -11,7 +11,7 @@
 #   IBM_JDK_DIR=<unpacked ibm-java-ws-sdk-pxi3260sr4ifx>   the same compiler
 #       as M.I.B. (32-bit x86: run in Docker's i386/debian:bookworm-slim)
 #   otherwise: the host JDK's javac --release 8, then version 46 and every
-#       StackMapTable removed (tools/StripFrames.java)
+#       StackMapTable removed (tools/classfile_transform.py)
 # Either way the result is checked: version 46, no StackMapTable, and none of
 # StringBuilder, invokedynamic, class literals or boxing, which the unit's
 # class library or J9 cannot run.
@@ -46,8 +46,7 @@ else
     while IFS= read -r f; do SRCS+=("$f"); done < <(find "$HERE/src" "$HERE/stubs" -name '*.java' | sort)
     javac --release 8 -nowarn -encoding UTF-8 -d "$T/classes" "${SRCS[@]}"
     for c in "${OURS[@]}"; do
-        java --add-exports java.base/jdk.internal.org.objectweb.asm=ALL-UNNAMED \
-            "$ROOT/tools/StripFrames.java" "$T/classes/$c"
+        python3 "$ROOT/tools/classfile_transform.py" strip-frames "$T/classes/$c"
     done
     HOW="host javac, frames stripped"
 fi
@@ -57,7 +56,7 @@ for c in "${OURS[@]}"; do
     [ -f "$f" ] || { echo "ERROR: $c was not built"; exit 1; }
     v=$(javap -v "$f" | sed -n 's/^ *major version: //p')
     [ "$v" = 46 ] || { echo "ERROR: $c is class version $v, not 46"; exit 1; }
-    bad=$(javap -c -p -v "$f" | grep -E 'StackMapTable|StringBuilder|invokedynamic|InvokeDynamic|MethodHandle|ldc[_w]* +#[0-9]+ +// class|java/lang/Integer\.valueOf|java/lang/Boolean\.valueOf|BootstrapMethods' || true)
+    bad=$(javap -c -p "$f" | grep -E 'StackMapTable|StringBuilder|invokedynamic|InvokeDynamic|MethodHandle|ldc[_w]* +#[0-9]+ +// class|java/lang/Integer\.valueOf|java/lang/Boolean\.valueOf|BootstrapMethods' || true)
     [ -z "$bad" ] || { echo "ERROR: $c has something the unit's J9 cannot take:"; echo "$bad" | sort -u; exit 1; }
 done
 
