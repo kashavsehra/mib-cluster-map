@@ -388,9 +388,9 @@ static void load_config_file(void)
     unsigned i;
 
     candidates[0] = getenv("GAL_HOOK_CONF");
-    candidates[1] = "/fs/sdb0/gal_dualscreen.conf";
-    candidates[2] = "/fs/sda0/gal_dualscreen.conf";
-    candidates[3] = "/eso/lib/gal_dualscreen/gal_dualscreen.conf";
+    candidates[1] = "/eso/lib/gal_dualscreen/gal_dualscreen.conf";
+    candidates[2] = "/fs/sdb0/gal_dualscreen.conf";
+    candidates[3] = "/fs/sda0/gal_dualscreen.conf";
     candidates[4] = "/tmp/gal_dualscreen.conf";
     for (i = 0u; i < sizeof(candidates) / sizeof(candidates[0]); ++i) {
         if (candidates[i] == NULL || *candidates[i] == '\0') continue;
@@ -614,10 +614,9 @@ int gal_hook_init(const gal_secondary_config *config)
      * Width and height are pinned above and can no longer be zero, so this
      * is now purely an fps check -- and the firmware's own gal.json says
      * "Supported framerates are 30 or 60 fps". Anything else is not a
-     * gentle degradation: the hook matches the primary's configuration
-     * table on (resolution, fps) to build the secondary's entry, so an
-     * unsupported rate makes that lookup fail and the secondary sink is
-     * never built at all, reported as no_matching_resolution_fps.
+     * gentle degradation: the hook uses an advertised primary configuration
+     * as the secondary's frame-rate template (and as the base for HD modes).
+     * If no template exists at this rate, the secondary sink cannot be built.
      * Rejecting it here says so plainly instead.
      */
     if (g_config.fps != 30u && g_config.fps != 60u) {

@@ -736,6 +736,9 @@ static int build_secondary_sink(void *primary, void *controller)
     unsigned primary_config_count;
     void *primary_config_data;
     int found_video_config = 0;
+    int used_hd_fallback = 0;
+    unsigned selected_primary_index = 0u;
+    uint32_t requested_resolution = secondary_resolution_enum(config);
     unsigned patched_displayable = 0u;
 
     if (g_build_attempted) return g_secondary_registered ? 0 : -1;
@@ -827,23 +830,54 @@ static int build_secondary_sink(void *primary, void *controller)
     }
     for (index = 0u; index < primary_config_count; ++index) {
         unsigned char *entry = (unsigned char *)primary_config_data + index * g_profile->cfg_entry_size;
-        if (load_u32(entry, 0u) == secondary_resolution_enum(config) &&
+        if (load_u32(entry, 0u) == requested_resolution &&
             load_u32(entry, 4u) == config->fps) {
             memcpy(secondary_config_entry, entry, g_profile->cfg_entry_size);
-            store_u32(secondary_config_entry, 16u, config->dpi);
-            store_u32(secondary_config_entry, 20u, config->margin_width);
-            store_u32(secondary_config_entry, 24u, config->margin_height);
             found_video_config = 1;
-            gal_hook_logf("event=secondary.video_config result=success primary_index=%u resolution_enum=%u fps=%u dpi=%u margins=%ux%u",
-                          index, load_u32(entry, 0u), load_u32(entry, 4u),
-                          config->dpi, config->margin_width, config->margin_height);
+            selected_primary_index = index;
             break;
+        }
+    }
+    /*
+     * Android Auto allows the primary and secondary displays to use different
+     * video sizes. If this unit advertises only 800x480 for its primary sink,
+     * use that entry as the template for the opt-in HD secondary mode, then
+     * replace its resolution enum and HD geometry below. Keep the primary
+     * stream and its advertised configurations untouched.
+     */
+    if (!found_video_config &&
+        (requested_resolution == VIDEO_CODEC_RESOLUTION_1280_720 ||
+         requested_resolution == VIDEO_CODEC_RESOLUTION_1920_1080)) {
+        for (index = 0u; index < primary_config_count; ++index) {
+            unsigned char *entry = (unsigned char *)primary_config_data + index * g_profile->cfg_entry_size;
+            if (load_u32(entry, 0u) == VIDEO_CODEC_RESOLUTION_800_480 &&
+                load_u32(entry, 4u) == config->fps) {
+                memcpy(secondary_config_entry, entry, g_profile->cfg_entry_size);
+                store_u32(secondary_config_entry, 0u, requested_resolution);
+                found_video_config = 1;
+                used_hd_fallback = 1;
+                selected_primary_index = index;
+                break;
+            }
         }
     }
     if (!found_video_config) {
         gal_hook_logf("event=secondary.video_config result=failed reason=no_matching_resolution_fps count=%u resolution_enum=%u requested_fps=%u",
-                      primary_config_count, secondary_resolution_enum(config), config->fps);
+                      primary_config_count, requested_resolution, config->fps);
         goto fail;
+    }
+    store_u32(secondary_config_entry, 16u, config->dpi);
+    store_u32(secondary_config_entry, 20u, config->margin_width);
+    store_u32(secondary_config_entry, 24u, config->margin_height);
+    if (used_hd_fallback) {
+        gal_hook_logf("event=secondary.video_config result=success source=experimental_800x480_template primary_index=%u source_resolution_enum=%u resolution_enum=%u fps=%u dpi=%u margins=%ux%u",
+                      selected_primary_index, VIDEO_CODEC_RESOLUTION_800_480,
+                      requested_resolution, config->fps, config->dpi,
+                      config->margin_width, config->margin_height);
+    } else {
+        gal_hook_logf("event=secondary.video_config result=success source=exact_primary_mode primary_index=%u resolution_enum=%u fps=%u dpi=%u margins=%ux%u",
+                      selected_primary_index, requested_resolution, config->fps,
+                      config->dpi, config->margin_width, config->margin_height);
     }
     secondary_config_vector[0] = 1u;
     secondary_config_vector[1] = (uint32_t)(uintptr_t)secondary_config_entry;

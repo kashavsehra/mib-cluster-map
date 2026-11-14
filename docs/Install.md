@@ -196,7 +196,9 @@ its script could not find its own folder, #95.)
 ## Settings
 
 Edit `ClusterMap/gal_dualscreen.conf` on the card, run the install again so
-the unit's copy is refreshed, and reboot. The file documents every key.
+the unit's copy is refreshed, and reboot. The hook reads the installed copy
+first; this also lets green-menu switches take effect even when the SD card
+still has the original settings. The file documents every key.
 
 **A line that starts with `#` is switched off.** Many settings ship that way.
 To use one, delete the `#` at the very start of the line, and keep only one
@@ -219,8 +221,8 @@ it must start at the beginning of the line, with no `#` in front.
 | `GAL_SECONDARY_UI_THEME` | 0 (follows the headlights) | you want the cluster map always dark (2) or always light (1). Waze stays dark whatever is set. 1 or 2 costs two bytes of the insets message, so fewer insets can go above 127 |
 | `CLUSTERMAP_KEEP_SETTINGS` | unset (keep) | you want a clean install. Each install remembers the lines you changed in `gal_dualscreen.conf` and puts them back at the next install wherever the new card still has the shipped default; a line changed on the new card wins, and `update_result.txt` lists what was kept. When you install the same release again, a setting you have edited on the card since the last install is used as the card has it, so a line you switch off stays off. `0` installs only the card's settings: use it once if a setting from an older release keeps coming back. Settings from v1.1.0 and betas before v1.1.1-beta19 are not carried over. The uninstall forgets them |
 | `CLUSTERMAP_FULL_FRAME` | 0 | the map looks soft on a wide window (SEAT, Skoda, Audi). 1 has the phone draw on the whole 800×480 frame with wide pixels instead of leaving margins: more detail, same layout. Also a green-menu switch ("Sharper map"), so it can be tried in the car. From AMDFX60's fork, car-tested on his Skoda Superb (#56) |
-| `CLUSTERMAP_720P` | 0 | test a 1280×720 Android Auto frame, with margins leaving the cockpit window's own pixels (for example 1010×376). Switchable from the green menu. Not car-tested here; requires the primary sink to advertise 720p |
-| `CLUSTERMAP_1080P` | 0 | test a 1920×1080 frame, with margins leaving the cockpit window's own pixels (for example 1440×455). Switchable from the green menu. Not car-tested here; requires the primary sink to advertise 1080p. Mutually exclusive with `CLUSTERMAP_720P`; either high-resolution mode takes precedence over `CLUSTERMAP_FULL_FRAME` |
+| `CLUSTERMAP_720P` | 0 | experimentally request a separate 1280×720 Android Auto secondary stream, with margins leaving the cockpit window's own pixels (for example 1010×376). If the primary sink has no matching HD entry, the hook uses its 800×480 configuration at the same FPS as a template. The phone/unit may reject it; verify the received frame dimensions in the player log |
+| `CLUSTERMAP_1080P` | 0 | experimentally request a separate 1920×1080 Android Auto secondary stream, with margins leaving the cockpit window's own pixels (for example 1440×455). If the primary sink has no matching HD entry, the hook uses its 800×480 configuration at the same FPS as a template. The phone/unit may reject it; verify the received frame dimensions in the player log. Mutually exclusive with `CLUSTERMAP_720P`; either high-resolution mode takes precedence over `CLUSTERMAP_FULL_FRAME` |
 | `GAL_PLAYER_PRIORITY` | unset | the cluster map stutters when the unit is busy. 12 raises the player a little above the default 10; it never lowers it. Not car-tested |
 | `GAL_DUALSCREEN_AAP_MINOR` | 5 | the Android Auto version the unit claims (1.x). The map shows at 2 to 7. At 6 or higher Google Maps sends newer navigation messages this unit cannot read; the hook translates them into the old ones (`GAL_DUALSCREEN_NAV_TRANSLATE`, on), so the arrows jar should keep its turn pictograms. Not yet car-tested above 5 (#4) |
 | `GAL_PLAYER_WINDOW` | unset | the installer says the cluster map window was not listed and guessed wrong. It assumes `1010x376` on SEAT and Skoda and `800x480` on VW, but some VW cockpits are `1010x376` (#52) |
