@@ -133,6 +133,7 @@ build_java() {
   # tests/navasiazoom_check.sh the Chinese K1006_2's.
   "$ROOT/java/wheelzoom/build.sh" "$ROOT/build"
   "$ROOT/java/navasiazoom/build.sh" "$ROOT/build"
+  "$ROOT/java/coverart/build.sh" "$ROOT/build"
 }
 
 package() {
@@ -149,6 +150,7 @@ package() {
   mkdir -p "$D/carplay"
   cp "$ROOT/build/libcarplay_cluster.so" "$ROOT/carplay/carplay_cluster.sh" "$D/carplay/"
   cp "$ROOT/build/ClusterMapWheelZoom.jar" "$ROOT/build/ClusterMapNavAsiaZoom.jar" "$D/carplay/"
+  cp "$ROOT/build/ClusterMapCoverArt.jar" "$D/carplay/" 2>/dev/null || true
   cp "$ROOT/thirdparty/mhi2_altscreen_carplay/LICENSE" "$D/carplay/mhi2_altscreen_carplay.LICENSE"
   # The install scripts treat their own folder as the package root.
   cp "$ROOT"/scripts/enable_hook.sh "$ROOT"/scripts/disable_hook.sh "$ROOT"/scripts/collect_logs.sh \
