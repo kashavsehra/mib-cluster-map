@@ -1,6 +1,3 @@
-This is a lightweight copy of `AndroidAuto2ListenerDistributor.java` that captures `IContext` / `BundleContext` and starts `VCViewWatcher`—and if `AAcoverart_hook.jar` is also present, delegates all `AAJavaBridge` calls reflectively so **both JARs work together or completely independently**:
-
-```java
 package de.audi.app.terminalmode.smartphone.androidauto2;
 
 import de.audi.app.terminalmode.IContext;
