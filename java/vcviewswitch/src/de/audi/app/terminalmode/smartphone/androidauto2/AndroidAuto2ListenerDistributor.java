@@ -104,6 +104,12 @@ public class AndroidAuto2ListenerDistributor implements DSIAndroidAuto2Listener 
             VCViewWatcher.setBundleContext(obj);
             invokeBridge("setBundleContext", new Class[]{Object.class}, new Object[]{obj});
         }
+
+        if ("de.audi.tghu.navi.app.cluster.ClusterService".equals(clsName) ||
+            clsName.indexOf("CombiModule") >= 0) {
+            VCViewWatcher.setServiceObject(obj); // (if you add a setter in VCViewWatcher)
+        }
+       
     }
 
     private boolean implementsInterface(Object obj, String ifaceName) {
