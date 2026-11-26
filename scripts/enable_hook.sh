@@ -1947,6 +1947,51 @@ else
     esac
 fi
 
+# ---- Java interface: Virtual Cockpit VIEW button sync on A3 8V (AU37x) -----
+# VCViewSwitch.jar (kashavsehra, java/vcviewswitch) detects Virtual Cockpit view
+# changes (Classic, Large, Sport) via BAP FctID 54 / ClusterService and writes
+# the active view to /tmp/gal_view so the hook switches per-view insets
+# automatically. Completely independent of CLUSTERMAP_AU37X_COVER.
+VS=`sed -n 's/^CLUSTERMAP_VC_VIEW_SYNC=\([a-z0-9]*\)[ 	]*$/\1/p' \
+    "$PRELOAD_WRITE_DIR/gal_dualscreen.conf" 2>/dev/null | tail -1`
+VS_JAR=VCViewSwitch.jar
+VS_MARKER=/mnt/app/eso/hmi/lsd/.aacluster_vcviewsync_added
+VS_WHY=
+if [ "$VS" != 1 ]; then
+    VS_WHY="off (CLUSTERMAP_VC_VIEW_SYNC=1 turns it on)"
+elif ! train_has "$PROFILES" "$TRAIN" aacover; then
+    VS_WHY="not made for $TRAIN"
+elif [ "`file_size /ifs/lsd.jxe`" != 60645336 ]; then
+    VS_WHY="this unit's interface (lsd.jxe, `file_size /ifs/lsd.jxe` bytes) is not the 60645336-byte build it was made for"
+elif [ ! -r "$CARD_ROOT/carplay/$VS_JAR" ] || [ ! -r "$LSD_SH" ] || [ ! -r "$CARD_ROOT/lsd_jar.sh" ]; then
+    VS_WHY="its files are not in this package"
+fi
+if [ -z "$VS_WHY" ]; then
+    if sh "$CARD_ROOT/lsd_jar.sh" add $VS_JAR "$CARD_ROOT/carplay/$VS_JAR"; then
+        if mount -uw /mnt/app 2>/dev/null; then
+            : > "$VS_MARKER"
+            mount -ur /mnt/app 2>/dev/null || true
+        fi
+        echo "Virtual Cockpit view sync: on; steering-wheel VIEW button switches per-view insets automatically (after a reboot)."
+    else
+        echo "WARNING: could not add $VS_JAR; lsd.sh is unchanged." >&2
+    fi
+elif [ -f "$VS_MARKER" ] && sh "$CARD_ROOT/lsd_jar.sh" loaded $VS_JAR; then
+    if sh "$CARD_ROOT/lsd_jar.sh" remove $VS_JAR; then
+        if mount -uw /mnt/app 2>/dev/null; then rm -f "$VS_MARKER"; mount -ur /mnt/app 2>/dev/null || true; fi
+        echo "Virtual Cockpit view sync: removed, $VS_WHY."
+    else
+        echo "WARNING: could not remove $VS_JAR; lsd.sh is unchanged." >&2
+    fi
+else
+    case "$TRAIN" in
+        *_AU37x_*) echo "Virtual Cockpit view sync: not installed, $VS_WHY." ;;
+    esac
+fi
+
+
+
+
 # ---- CarPlay map: keep it when the iPhone starts a route --------------------
 # CLUSTERMAP_CARPLAY_HIDE_NAV=1: the CarPlay hook does not pass on to the car
 # that the iPhone has started a route (libcarplay_cluster.so reads the marker
