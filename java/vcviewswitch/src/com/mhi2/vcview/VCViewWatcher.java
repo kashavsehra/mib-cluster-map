@@ -32,6 +32,24 @@ public class VCViewWatcher implements Runnable {
         start();
     }
 
+    public static void setServiceObject(Object obj) {
+        if (obj == null) return;
+        String name = obj.getClass().getName();
+        String lower = name.toLowerCase();
+        if ("de.audi.tghu.navi.app.cluster.ClusterService".equals(name)) {
+            clusterService = obj;
+            debugLog("VCViewWatcher: received ClusterService directly");
+        } else if (name.indexOf("CombiModule") >= 0 && lower.indexOf("navi") >= 0) {
+            naviCombiModule = obj;
+            debugLog("VCViewWatcher: received " + name + " directly");
+        } else if (name.indexOf("CombiModule") >= 0 &&
+            (lower.indexOf("car") >= 0 || lower.indexOf("kombi") >= 0 || lower.indexOf("display") >= 0)) {
+            carCombiModule = obj;
+            debugLog("VCViewWatcher: received " + name + " directly");
+        }
+    }
+
+
     public static synchronized void start() {
         if (started) return;
         started = true;
@@ -150,7 +168,11 @@ public class VCViewWatcher implements Runnable {
     }
 
     private String mapStatusObjectToView(Object target) {
-        if (target == null) return null;
+        return mapStatusObjectToView(target, 0);
+    }
+
+    private String mapStatusObjectToView(Object target, int depth) {
+        if (target == null || depth > 1) return null;
         Class cls = target.getClass();
         while (cls != null && !"java.lang.Object".equals(cls.getName())) {
             Field[] fields = cls.getDeclaredFields();
@@ -180,6 +202,15 @@ public class VCViewWatcher implements Runnable {
                             if (iv == 1) return "sport";
                             if (iv == 0) return "classic";
                         }
+                    } else if (val != null && depth == 0 &&
+                        (name.indexOf("view") >= 0 || name.indexOf("layout") >= 0 ||
+                         name.indexOf("preset") >= 0 || name.indexOf("state") >= 0 ||
+                         name.indexOf("status") >= 0 || name.indexOf("config") >= 0)) {
+                        String subCls = val.getClass().getName();
+                        if (!subCls.startsWith("java.") && !subCls.startsWith("org.osgi.")) {
+                            String nested = mapStatusObjectToView(val, 1);
+                            if (nested != null) return nested;
+                        }
                     }
                 } catch (Throwable t) {}
             }
@@ -188,6 +219,7 @@ public class VCViewWatcher implements Runnable {
         return null;
     }
 
+    
     private void writeGalView(String view) {
         try {
             File tmp = new File("/tmp/gal_view.tmp");
