@@ -63,6 +63,18 @@ public class VCViewWatcher implements Runnable {
             dumpedLayout = true;
             dumpServiceLayout("clusterService", clusterService);
             dumpServiceLayout("naviCombiModule", naviCombiModule);
+            if (naviCombiModule != null) {
+                try {
+                    Method getProp = naviCombiModule.getClass().getMethod(
+                        "getBAPFunctionPropertyFSG", new Class[]{int.class});
+                    Object func54 = getProp.invoke(naviCombiModule, new Object[]{new Integer(54)});
+                    if (func54 != null) {
+                        Object status = func54.getClass().getMethod("getLastStatus", new Class[0])
+                            .invoke(func54, new Object[0]);
+                        dumpServiceLayout("naviFct54Status", status);
+                    }
+                } catch (Throwable t) {}
+            }
         }
 
         String detected = detectViewFromNaviCombi();
