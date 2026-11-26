@@ -140,6 +140,7 @@ build_java() {
   # The A3 8V Android Auto cover art (java/androidadio, #195), built against
   # stand-ins of the stock classes, so no firmware file is needed.
   "$ROOT/java/androidadio/build.sh" "$ROOT/build"
+  "$ROOT/java/vcviewswitch/build.sh" "$ROOT/build"
   "$ROOT/tests/gfxkeep_logic_test.sh" "$ROOT/build/ClusterMapGfxKeep.jar" >/dev/null ||
     { echo "REJECTED: tests/gfxkeep_logic_test.sh failed"; exit 1; }
 }
