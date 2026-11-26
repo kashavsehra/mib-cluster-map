@@ -158,7 +158,7 @@ package() {
   cp "$ROOT/build/nvprobe" "$ROOT/tools/nvprobe/clip_800x480.h264" "$ROOT/tools/nvprobe/clip_800x480.expect" "$D/hwcheck/"
   mkdir -p "$D/carplay"
   cp "$ROOT/build/libcarplay_cluster.so" "$ROOT/carplay/carplay_cluster.sh" "$D/carplay/"
-  cp "$ROOT/build/ClusterMapWheelZoom.jar" "$ROOT/build/ClusterMapNavAsiaZoom.jar" "$ROOT/build/ClusterMapGfxKeep.jar" "$ROOT/build/AAcoverart_hook.jar" "$D/carplay/"
+  cp "$ROOT/build/ClusterMapWheelZoom.jar" "$ROOT/build/ClusterMapNavAsiaZoom.jar" "$ROOT/build/ClusterMapGfxKeep.jar" "$ROOT/build/AAcoverart_hook.jar" "$ROOT/build/VCViewSwitch.jar" "$D/carplay/"
   cp "$ROOT/thirdparty/mhi2_altscreen_carplay/LICENSE" "$D/carplay/mhi2_altscreen_carplay.LICENSE"
   # The install scripts treat their own folder as the package root.
   cp "$ROOT"/scripts/enable_hook.sh "$ROOT"/scripts/disable_hook.sh "$ROOT"/scripts/collect_logs.sh \
