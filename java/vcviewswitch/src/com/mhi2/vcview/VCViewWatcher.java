@@ -219,6 +219,30 @@ public class VCViewWatcher implements Runnable {
         } catch (Throwable t) {}
     }
 
+        // Fallback: ClusterService static instance field (matching AAManeuverProvider)
+        if (clusterService == null) {
+            try {
+                Class cls = forName("de.audi.tghu.navi.app.cluster.ClusterService");
+                Class c = cls;
+                while (c != null) {
+                    try {
+                        Field f = c.getDeclaredField("instance");
+                        f.setAccessible(true);
+                        Object inst = f.get(null);
+                        if (inst != null) {
+                            clusterService = inst;
+                            debugLog("VCViewWatcher: discovered ClusterService via static instance");
+                            break;
+                        }
+                    } catch (NoSuchFieldException e) {
+                        c = c.getSuperclass();
+                    }
+                }
+            } catch (Throwable t) {}
+        }
+
+
+    
     private boolean tryStoreService(Object obj) {
         if (obj == null) return false;
         String name = obj.getClass().getName();
