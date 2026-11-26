@@ -78,7 +78,7 @@ fi
 # (only the cover-art hook, #195) is also put on the $J9 launch line with
 # -Xbootclasspath/p:, after -Xbootclasspath:$BOOTCLASSPATH. Every other jar
 # (NavActiveIgnore) is only copied, and lsd.sh stays as it is.
-PREPEND_JARS=${LSD_JAR_TEST_PREPEND:-AAcoverart_hook.jar}
+PREPEND_JARS=${LSD_JAR_TEST_PREPEND:-AAcoverart_hook.jar VCViewSwitch.jar}
 BOOTPREPEND=0
 case " $PREPEND_JARS " in
     *" $NAME "*)
