@@ -1973,7 +1973,14 @@ if [ -z "$VS_WHY" ]; then
             mount -ur /mnt/app 2>/dev/null || true
         fi
         echo "Virtual Cockpit view sync: on; steering-wheel VIEW button switches per-view insets automatically (after a reboot)."
+        if ! grep -q '^GAL_SECONDARY_LARGE_INSETS=' "$PRELOAD_WRITE_DIR/gal_dualscreen.conf" 2>/dev/null &&
+           ! grep -q '^GAL_SECONDARY_SPORT_INSETS=' "$PRELOAD_WRITE_DIR/gal_dualscreen.conf" 2>/dev/null; then
+            echo "NOTE: CLUSTERMAP_VC_VIEW_SYNC=1 is on, but GAL_SECONDARY_LARGE_INSETS and"
+            echo "      GAL_SECONDARY_SPORT_INSETS are still commented out in gal_dualscreen.conf."
+            echo "      Uncomment them so the hook applies per-view insets when the view changes."
+        fi
     else
+
         echo "WARNING: could not add $VS_JAR; lsd.sh is unchanged." >&2
     fi
 elif [ -f "$VS_MARKER" ] && sh "$CARD_ROOT/lsd_jar.sh" loaded $VS_JAR; then
